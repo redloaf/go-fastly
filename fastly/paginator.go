@@ -22,3 +22,10 @@ type PaginatorServices interface {
 	Remaining() int
 	GetNext() ([]*Service, error)
 }
+
+// PaginatorServiceAuthorizations represents a paginator.
+type PaginatorServiceAuthorizations interface {
+	HasNext() bool
+	Remaining() int
+	GetNext() ([]*ServiceAuthorization, error)
+}
