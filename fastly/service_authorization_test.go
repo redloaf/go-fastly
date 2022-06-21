@@ -74,6 +74,20 @@ func TestClient_ServiceAuthorizations(t *testing.T) {
 	if len(sas2) != 1 {
 		t.Errorf("expected 1 service authorization but got: %d", len(sas2))
 	}
+	if len(sas) == len(sas2) {
+		for _, expected := range sas {
+			var found bool
+			for _, actual := range sas2 {
+				if expected.ID == actual.ID {
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Errorf("expected service authorization pagination to match list: %s not found", expected.ID)
+			}
+		}
+	}
 
 	// Get
 	var nsa *ServiceAuthorization
