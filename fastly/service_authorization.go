@@ -1,7 +1,12 @@
 package fastly
 
 import (
+	"bytes"
 	"fmt"
+	"io"
+	"net/url"
+	"reflect"
+	"strconv"
 	"time"
 
 	"github.com/google/jsonapi"
@@ -137,4 +142,147 @@ func (c *Client) DeleteServiceAuthorization(i *DeleteServiceAuthorizationInput) 
 	_, err := c.Delete(path, nil)
 
 	return err
+}
+
+// ListServiceAuthorizationsInput is used as input to the ListServiceAuthorizations function.
+type ListServiceAuthorizationsInput struct {
+	PerPage int
+	Page    int
+}
+
+// ListServiceAuthorizations returns the full list of service authorizations visible with the current API key.
+func (c *Client) ListServiceAuthorizations(i *ListServiceAuthorizationsInput) ([]*ServiceAuthorization, error) {
+	resp, err := c.Get("/service-authorizations", &RequestOptions{
+		Headers: map[string]string{
+			"Accept": "application/vnd.api+json",
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	data, err := jsonapi.UnmarshalManyPayload(resp.Body, reflect.TypeOf(new(ServiceAuthorization)))
+	if err != nil {
+		return nil, err
+	}
+
+	s := make([]*ServiceAuthorization, len(data))
+	for i := range data {
+		typed, ok := data[i].(*ServiceAuthorization)
+		if !ok {
+			return nil, fmt.Errorf("unexpected response type: %T", data[i])
+		}
+		s[i] = typed
+	}
+	return s, nil
+}
+
+type ListServiceAuthorizationsPaginator struct {
+	consumed    bool
+	CurrentPage int
+	NextPage    int
+	LastPage    int
+	client      *Client
+	options     *ListServiceAuthorizationsInput
+}
+
+// HasNext returns a boolean indicating whether more pages are available
+func (p *ListServiceAuthorizationsPaginator) HasNext() bool {
+	return !p.consumed || p.Remaining() != 0
+}
+
+// Remaining returns the remaining page count
+func (p *ListServiceAuthorizationsPaginator) Remaining() int {
+	if p.LastPage == 0 {
+		return 0
+	}
+	return p.LastPage - p.CurrentPage
+}
+
+// GetNext retrieves data in the next page
+func (p *ListServiceAuthorizationsPaginator) GetNext() ([]*ServiceAuthorization, error) {
+	return p.client.listServiceAuthorizationsWithPage(p.options, p)
+}
+
+// NewListServiceAuthorizationsPaginator returns a new paginator
+func (c *Client) NewListServiceAuthorizationsPaginator(i *ListServiceAuthorizationsInput) PaginatorServiceAuthorizations {
+	return &ListServiceAuthorizationsPaginator{
+		client:  c,
+		options: i,
+	}
+}
+
+// listServiceAuthorizationsWithPage return a list of service authorizations
+func (c *Client) listServiceAuthorizationsWithPage(i *ListServiceAuthorizationsInput, p *ListServiceAuthorizationsPaginator) ([]*ServiceAuthorization, error) {
+	var perPage int
+	const maxPerPage = 100
+	if i.PerPage <= 0 {
+		perPage = maxPerPage
+	} else {
+		perPage = i.PerPage
+	}
+
+	// page is not specified, fetch from the beginning
+	if i.Page <= 0 && p.CurrentPage == 0 {
+		p.CurrentPage = 1
+	} else {
+		// page is specified, fetch from a given page
+		if !p.consumed {
+			p.CurrentPage = i.Page
+		} else {
+			p.CurrentPage = p.CurrentPage + 1
+		}
+	}
+
+	requestOptions := &RequestOptions{
+		Params: map[string]string{
+			"page[size]":   strconv.Itoa(perPage),
+			"page[number]": strconv.Itoa(p.CurrentPage),
+		},
+		Headers: map[string]string{
+			"Accept": "application/vnd.api+json",
+		},
+	}
+
+	resp, err := c.Get("/service-authorizations", requestOptions)
+	if err != nil {
+		return nil, err
+	}
+
+	var buf bytes.Buffer
+	tee := io.TeeReader(resp.Body, &buf)
+
+	info, err := getResponseInfo(tee)
+	if err != nil {
+		return nil, err
+	}
+
+	data, err := jsonapi.UnmarshalManyPayload(bytes.NewReader(buf.Bytes()), reflect.TypeOf(new(ServiceAuthorization)))
+	if err != nil {
+		return nil, err
+	}
+
+	s := make([]*ServiceAuthorization, len(data))
+	for i := range data {
+		typed, ok := data[i].(*ServiceAuthorization)
+		if !ok {
+			return nil, fmt.Errorf("unexpected response type: %T", data[i])
+		}
+		s[i] = typed
+	}
+
+	if l := info.Links.Next; l != "" {
+		u, _ := url.Parse(l)
+		query := u.Query()
+		p.NextPage, _ = strconv.Atoi(query["page[number]"][0])
+	}
+	if l := info.Links.Last; l != "" {
+		u, _ := url.Parse(l)
+		query := u.Query()
+		p.LastPage, _ = strconv.Atoi(query["page[number]"][0])
+	}
+
+	p.consumed = true
+
+	return s, nil
 }

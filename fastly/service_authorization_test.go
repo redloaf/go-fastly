@@ -45,6 +45,36 @@ func TestClient_ServiceAuthorizations(t *testing.T) {
 		t.Errorf("bad permission: %v", sa.Permission)
 	}
 
+	// List
+	var sas []*ServiceAuthorization
+	record(t, fixtureBase+"list", func(c *Client) {
+		sas, err = c.ListServiceAuthorizations(&ListServiceAuthorizationsInput{})
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(sas) < 1 {
+		t.Errorf("bad service authorizations: %v", sas)
+	}
+
+	// List with paginator
+	var sas2 []*ServiceAuthorization
+	var paginator PaginatorServiceAuthorizations
+	record(t, fixtureBase+"list_paginator", func(c *Client) {
+		paginator = c.NewListServiceAuthorizationsPaginator(
+			&ListServiceAuthorizationsInput{
+				PerPage: 1,
+			},
+		)
+		sas2, err = paginator.GetNext()
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(sas2) != 1 {
+		t.Errorf("expected 1 service authorization but got: %d", len(sas2))
+	}
+
 	// Get
 	var nsa *ServiceAuthorization
 	record(t, fixtureBase+"get", func(c *Client) {
