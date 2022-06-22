@@ -25,7 +25,7 @@ type ServiceAuthorization struct {
 	Permission string     `jsonapi:"attr,permission,omitempty"`
 	CreatedAt  *time.Time `jsonapi:"attr,created_at,iso8601"`
 	UpdatedAt  *time.Time `jsonapi:"attr,updated_at,iso8601"`
-	DeltedAt   *time.Time `jsonapi:"attr,deleted_at,iso8601"`
+	DeletedAt  *time.Time `jsonapi:"attr,deleted_at,iso8601"`
 	User       *SAUser    `jsonapi:"relation,user,omitempty"`
 	Service    *SAService `jsonapi:"relation,service,omitempty"`
 }
